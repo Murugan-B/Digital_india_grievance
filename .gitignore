@@ -1,0 +1,25 @@
+# Node modules
+node_modules/
+
+# Production build
+dist/
+dist-ssr/
+
+# Environment files and secrets
+.env
+.env.local
+.env.*
+!.env.example
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# System and IDE
+.DS_Store
+.idea/
+.vscode/
+*.log
