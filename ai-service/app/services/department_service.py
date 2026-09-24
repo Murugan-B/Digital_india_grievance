@@ -1,4 +1,5 @@
 import logging
+import hashlib as _hashlib
 import re
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
@@ -30,6 +31,37 @@ class DepartmentService:
             if not settings.SUPABASE_URL or not settings.SUPABASE_SECRET_KEY:
                 raise ValueError("SUPABASE_URL or SUPABASE_SECRET_KEY is not configured in AI Service.")
             self._supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SECRET_KEY)
+
+            # ----------------------------------------------------------
+            # TEMPORARY DIAGNOSTIC-3 — SDK state immediately after create_client()
+            # ----------------------------------------------------------
+            try:
+                import supabase as _sb, postgrest as _pg, supabase_auth as _sa
+                logger.info("[DIAGNOSTIC-3] supabase_version=%s", _sb.__version__)
+                logger.info("[DIAGNOSTIC-3] postgrest_version=%s", _pg.__version__)
+                logger.info("[DIAGNOSTIC-3] supabase_auth_version=%s", _sa.__version__)
+            except Exception as _ve:
+                logger.warning("[DIAGNOSTIC-3] version_check_failed=%s", _ve)
+
+            _stored_key = self._supabase.supabase_key or ""
+            logger.info("[DIAGNOSTIC-3] supabase_key_length=%d", len(_stored_key))
+            logger.info("[DIAGNOSTIC-3] supabase_key_sha256=%s",
+                        _hashlib.sha256(_stored_key.encode()).hexdigest())
+
+            # PostgREST headers — force-access the postgrest property to
+            # trigger lazy initialisation so we can read its headers NOW.
+            _pg_headers = dict(self._supabase.postgrest.headers)
+            for _hk in ["apikey", "apiKey", "Authorization", "authorization"]:
+                _hv = _pg_headers.get(_hk, _pg_headers.get(_hk.lower(), None))
+                if _hv is not None:
+                    _token = _hv.replace("Bearer ", "") if _hv.startswith("Bearer ") else _hv
+                    logger.info("[DIAGNOSTIC-3] postgrest_header_%s_length=%d sha256=%s",
+                                _hk, len(_token),
+                                _hashlib.sha256(_token.encode()).hexdigest())
+            # ----------------------------------------------------------
+            # END DIAGNOSTIC-3
+            # ----------------------------------------------------------
+
         return self._supabase
 
     def load_departments(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
@@ -40,7 +72,48 @@ class DepartmentService:
             return self._departments
 
         client = self._get_supabase_client()
-        res = client.from_("departments").select("id, name, code, description").eq("is_active", True).execute()
+
+        # ----------------------------------------------------------
+        # TEMPORARY DIAGNOSTIC-4 — PostgREST headers immediately before .execute()
+        # Detects whether _listen_to_auth_events mutated headers after create_client()
+        # ----------------------------------------------------------
+        _pg_hdrs_before = dict(client.postgrest.headers)
+        for _hk in ["apikey", "apiKey", "Authorization", "authorization"]:
+            _hv = _pg_hdrs_before.get(_hk, _pg_hdrs_before.get(_hk.lower(), None))
+            if _hv is not None:
+                _token = _hv.replace("Bearer ", "") if _hv.startswith("Bearer ") else _hv
+                logger.info("[DIAGNOSTIC-4-BEFORE] header_%s_length=%d sha256=%s",
+                            _hk, len(_token),
+                            _hashlib.sha256(_token.encode()).hexdigest())
+        # ----------------------------------------------------------
+
+        try:
+            res = client.from_("departments").select("id, name, code, description").eq("is_active", True).execute()
+        except Exception as _exec_exc:
+            # Log headers AFTER a failure too — the exception message IS the API error
+            _pg_hdrs_after = dict(client.postgrest.headers)
+            for _hk in ["apikey", "apiKey", "Authorization", "authorization"]:
+                _hv = _pg_hdrs_after.get(_hk, _pg_hdrs_after.get(_hk.lower(), None))
+                if _hv is not None:
+                    _token = _hv.replace("Bearer ", "") if _hv.startswith("Bearer ") else _hv
+                    logger.info("[DIAGNOSTIC-4-AFTER-EXC] header_%s_length=%d sha256=%s",
+                                _hk, len(_token),
+                                _hashlib.sha256(_token.encode()).hexdigest())
+            logger.error("[DIAGNOSTIC-4] execute() raised: %s: %s",
+                         type(_exec_exc).__name__, str(_exec_exc))
+            raise
+
+        # ----------------------------------------------------------
+        # TEMPORARY DIAGNOSTIC-4 — headers after successful .execute()
+        _pg_hdrs_after = dict(client.postgrest.headers)
+        for _hk in ["apikey", "apiKey", "Authorization", "authorization"]:
+            _hv = _pg_hdrs_after.get(_hk, _pg_hdrs_after.get(_hk.lower(), None))
+            if _hv is not None:
+                _token = _hv.replace("Bearer ", "") if _hv.startswith("Bearer ") else _hv
+                logger.info("[DIAGNOSTIC-4-AFTER] header_%s_length=%d sha256=%s",
+                            _hk, len(_token),
+                            _hashlib.sha256(_token.encode()).hexdigest())
+        # ----------------------------------------------------------
         
         if not res.data or len(res.data) == 0:
             logger.error("No active departments found in public.departments table!")
