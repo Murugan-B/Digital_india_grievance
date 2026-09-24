@@ -28,17 +28,51 @@ async def lifespan(app: FastAPI):
     # 2. Preload active departments and embeddings from Supabase
 
     # ----------------------------------------------------------------
-    # TEMPORARY DIAGNOSTIC — remove after Render secret is confirmed
-    # Logs safe metadata about the Supabase credentials WITHOUT
-    # printing the actual key value.
+    # TEMPORARY DIAGNOSTIC — remove after Render issue is resolved
+    # Phase 1: credential metadata (no key value printed)
+    # Phase 2: direct httpx REST call — identical to local test that
+    #          returned HTTP 200 — to isolate whether Supabase itself
+    #          rejects the Render request vs SDK/env difference.
     # ----------------------------------------------------------------
+    import httpx as _httpx
+
     _url = settings.SUPABASE_URL or ""
     _key = settings.SUPABASE_SECRET_KEY or ""
     _key_sha256 = hashlib.sha256(_key.encode("utf-8")).hexdigest() if _key else "(empty)"
-    logger.info("[DIAGNOSTIC] SUPABASE_URL=%s", _url)
-    logger.info("[DIAGNOSTIC] SUPABASE_SECRET_KEY_PRESENT=%s", str(bool(_key)).lower())
-    logger.info("[DIAGNOSTIC] SUPABASE_SECRET_KEY_LENGTH=%d", len(_key))
-    logger.info("[DIAGNOSTIC] SUPABASE_SECRET_KEY_SHA256=%s", _key_sha256)
+
+    # Phase 1 — credential fingerprint
+    logger.info("[DIAGNOSTIC-1] SUPABASE_URL=%s", _url)
+    logger.info("[DIAGNOSTIC-1] SUPABASE_SECRET_KEY_PRESENT=%s", str(bool(_key)).lower())
+    logger.info("[DIAGNOSTIC-1] SUPABASE_SECRET_KEY_LENGTH=%d", len(_key))
+    logger.info("[DIAGNOSTIC-1] SUPABASE_SECRET_KEY_SHA256=%s", _key_sha256)
+
+    # Phase 2 — direct REST probe (same headers as the supabase SDK)
+    # This fires BEFORE the SDK call below, so we get an independent data point.
+    if _url and _key:
+        try:
+            _diag_resp = _httpx.get(
+                _url + "/rest/v1/departments",
+                params={"select": "id"},
+                headers={
+                    "apikey":        _key,
+                    "Authorization": "Bearer " + _key,
+                },
+                timeout=10.0,
+                follow_redirects=True,
+            )
+            _body = _diag_resp.text
+            # Sanitize: log only status, content-type, length, first 120 chars
+            _safe_body = _body[:120].replace("\n", " ").replace("\r", "")
+            logger.info("[DIAGNOSTIC-2] DIRECT_HTTP_STATUS=%d", _diag_resp.status_code)
+            logger.info("[DIAGNOSTIC-2] DIRECT_HTTP_CONTENT_TYPE=%s",
+                        _diag_resp.headers.get("content-type", "(none)"))
+            logger.info("[DIAGNOSTIC-2] DIRECT_HTTP_BODY_LENGTH=%d", len(_body))
+            logger.info("[DIAGNOSTIC-2] DIRECT_HTTP_BODY_FIRST_120=%r", _safe_body)
+        except Exception as _diag_exc:
+            logger.warning("[DIAGNOSTIC-2] DIRECT_HTTP_EXCEPTION=%s: %s",
+                           type(_diag_exc).__name__, str(_diag_exc))
+    else:
+        logger.warning("[DIAGNOSTIC-2] SKIPPED — URL or KEY missing")
     # ----------------------------------------------------------------
     # END TEMPORARY DIAGNOSTIC
     # ----------------------------------------------------------------
