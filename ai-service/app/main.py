@@ -77,6 +77,61 @@ async def lifespan(app: FastAPI):
     # END TEMPORARY DIAGNOSTIC
     # ----------------------------------------------------------------
 
+    # ----------------------------------------------------------------
+    # TEMPORARY DIAGNOSTIC-FS — inspect physical department_service.py
+    # ----------------------------------------------------------------
+    import inspect as _inspect
+    import app.services.department_service as _ds_module
+
+    _mod_file = getattr(_ds_module, "__file__", None)
+    _cls_file = _inspect.getfile(department_service.__class__) if hasattr(department_service, "__class__") else None
+
+    logger.info("[DIAGNOSTIC-FS] IMPORTED_MODULE_FILE=%s", _mod_file)
+    logger.info("[DIAGNOSTIC-FS] CLASS_DEFINED_FILE=%s", _cls_file)
+
+    # Check potential runtime paths
+    _probe_paths = list(filter(None, [
+        _mod_file,
+        "/app/app/services/department_service.py",
+        "app/services/department_service.py"
+    ]))
+    _seen_paths = set()
+
+    for _p in _probe_paths:
+        if _p in _seen_paths:
+            continue
+        _seen_paths.add(_p)
+        _f_exists = os.path.exists(_p)
+        logger.info("[DIAGNOSTIC-FS] PATH=%s EXISTS=%s", _p, str(_f_exists).lower())
+        if _f_exists:
+            try:
+                with open(_p, "rb") as _f:
+                    _content = _f.read()
+                _f_size = len(_content)
+                _f_sha = hashlib.sha256(_content).hexdigest()
+                _f_text = _content.decode("utf-8", errors="replace")
+                _has_d3 = "DIAGNOSTIC-3" in _f_text
+                _has_d4 = "DIAGNOSTIC-4-BEFORE" in _f_text
+                logger.info("[DIAGNOSTIC-FS] PATH=%s SIZE=%d SHA256=%s HAS_D3=%s HAS_D4=%s",
+                            _p, _f_size, _f_sha, str(_has_d3).lower(), str(_has_d4).lower())
+                
+                # Find first matching line for DIAGNOSTIC-3
+                _lines = _f_text.splitlines()
+                _d3_match = None
+                for _idx, _line in enumerate(_lines, start=1):
+                    if "DIAGNOSTIC-3" in _line:
+                        _d3_match = (_idx, _line.strip())
+                        break
+                if _d3_match:
+                    logger.info("[DIAGNOSTIC-FS] FIRST_D3_LINE_NUM=%d CONTENT=%r", _d3_match[0], _d3_match[1])
+                else:
+                    logger.info("[DIAGNOSTIC-FS] FIRST_D3_LINE_NUM=NONE")
+            except Exception as _read_err:
+                logger.warning("[DIAGNOSTIC-FS] READ_ERROR for %s: %s", _p, _read_err)
+    # ----------------------------------------------------------------
+    # END TEMPORARY DIAGNOSTIC-FS
+    # ----------------------------------------------------------------
+
     try:
         if settings.SUPABASE_URL and settings.SUPABASE_SECRET_KEY:
             department_service.load_departments()
