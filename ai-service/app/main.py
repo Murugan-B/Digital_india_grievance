@@ -1,4 +1,5 @@
 import logging
+import hashlib
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.config import settings
@@ -25,6 +26,23 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to preload model: {e}")
         
     # 2. Preload active departments and embeddings from Supabase
+
+    # ----------------------------------------------------------------
+    # TEMPORARY DIAGNOSTIC — remove after Render secret is confirmed
+    # Logs safe metadata about the Supabase credentials WITHOUT
+    # printing the actual key value.
+    # ----------------------------------------------------------------
+    _url = settings.SUPABASE_URL or ""
+    _key = settings.SUPABASE_SECRET_KEY or ""
+    _key_sha256 = hashlib.sha256(_key.encode("utf-8")).hexdigest() if _key else "(empty)"
+    logger.info("[DIAGNOSTIC] SUPABASE_URL=%s", _url)
+    logger.info("[DIAGNOSTIC] SUPABASE_SECRET_KEY_PRESENT=%s", str(bool(_key)).lower())
+    logger.info("[DIAGNOSTIC] SUPABASE_SECRET_KEY_LENGTH=%d", len(_key))
+    logger.info("[DIAGNOSTIC] SUPABASE_SECRET_KEY_SHA256=%s", _key_sha256)
+    # ----------------------------------------------------------------
+    # END TEMPORARY DIAGNOSTIC
+    # ----------------------------------------------------------------
+
     try:
         if settings.SUPABASE_URL and settings.SUPABASE_SECRET_KEY:
             department_service.load_departments()
