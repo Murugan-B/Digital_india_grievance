@@ -1,5 +1,6 @@
 import logging
 import hashlib
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.config import settings
