@@ -5,8 +5,9 @@ sentence-transformers==3.4.1
 # Do NOT change this line — torch without the CPU index pulls a full CUDA bundle
 # (~2.5 GB disk, ~400 MB extra RAM) which crashes Render Free (512 MiB limit).
 torch>=2.2.0
-pydantic==2.10.4
+pydantic==2.11.7
 pydantic-settings==2.7.0
+starlette==0.41.3
 supabase==2.31.0
 python-dotenv==1.0.1
 numpy>=1.26.0
